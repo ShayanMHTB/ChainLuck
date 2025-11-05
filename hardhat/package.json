@@ -1,0 +1,52 @@
+{
+  "name": "chainluck-hardhat",
+  "version": "1.0.0",
+  "description": "ChainLuck Lottery Smart Contracts",
+  "main": "index.js",
+  "scripts": {
+    "compile": "npx hardhat compile",
+    "test": "npx hardhat test",
+    "coverage": "npx hardhat coverage",
+    "clean": "npx hardhat clean",
+    "deploy:local": "npx hardhat run scripts/deploy.ts --network localhost",
+    "deploy:mumbai": "npx hardhat run scripts/deploy.ts --network mumbai",
+    "deploy:polygon": "npx hardhat run scripts/deploy.ts --network polygon",
+    "deploy:bsc-testnet": "npx hardhat run scripts/deploy.ts --network bscTestnet",
+    "deploy:bsc": "npx hardhat run scripts/deploy.ts --network bsc",
+    "setup-wallets:local": "npx hardhat run scripts/setup-test-wallets.ts --network localhost",
+    "setup-wallets:mumbai": "npx hardhat run scripts/setup-test-wallets.ts --network mumbai",
+    "test-interactions:local": "npx hardhat run scripts/test-interactions.ts --network localhost",
+    "test-interactions:mumbai": "npx hardhat run scripts/test-interactions.ts --network mumbai",
+    "verify:mumbai": "npx hardhat verify --network mumbai",
+    "verify:polygon": "npx hardhat verify --network polygon",
+    "verify:bsc": "npx hardhat verify --network bsc",
+    "node": "npx hardhat node",
+    "console:local": "npx hardhat console --network localhost",
+    "console:mumbai": "npx hardhat console --network mumbai",
+    "flatten": "npx hardhat flatten contracts/ChainLuckLottery.sol > flattened.sol",
+    "size": "npx hardhat size-contracts",
+    "gas-report": "REPORT_GAS=true npx hardhat test"
+  },
+  "keywords": [
+    "blockchain",
+    "lottery",
+    "defi",
+    "polygon",
+    "chainlink"
+  ],
+  "author": "ChainLuck Team",
+  "license": "MIT",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "@types/node": "^20.0.0",
+    "dotenv": "^16.0.0",
+    "hardhat": "^2.19.0",
+    "hardhat-contract-sizer": "^2.10.0",
+    "hardhat-gas-reporter": "^1.0.9",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "@chainlink/contracts": "^1.4.0",
+    "@openzeppelin/contracts": "^5.3.0"
+  }
+}
