@@ -4,6 +4,7 @@
 
 import Link from 'next/link';
 import { useTheme } from 'next-themes';
+import { useTranslations } from 'next-intl';
 import { useState } from 'react';
 import {
   Moon,
@@ -26,9 +27,11 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { APP_CONFIG } from '@/data/constants';
 import { useWallet } from '@/components/providers/WalletProvider';
+import { LanguageSelector } from '@/components/common/LanguageSelector';
 
 export function Header() {
   const { setTheme } = useTheme();
+  const t = useTranslations();
   const {
     isConnected,
     address,
@@ -101,13 +104,19 @@ export function Header() {
                 href="/"
                 className="text-sm font-medium transition-colors hover:text-primary"
               >
-                Lottery
+                {t('nav.home')}
               </Link>
               <Link
                 href="/about"
                 className="text-sm font-medium transition-colors hover:text-primary"
               >
-                About
+                {t('nav.about')}
+              </Link>
+              <Link
+                href="/stats"
+                className="text-sm font-medium transition-colors hover:text-primary"
+              >
+                {t('nav.stats')}
               </Link>
             </nav>
           </div>
@@ -133,6 +142,9 @@ export function Header() {
                 LIVE
               </span>
             </div>
+
+            {/* Language Selector */}
+            <LanguageSelector />
 
             {/* Theme Toggle */}
             <DropdownMenu>
@@ -171,7 +183,7 @@ export function Header() {
                         variant="secondary"
                         className="ml-2 hidden sm:inline"
                       >
-                        Connected
+                        {t('auth.connected')}
                       </Badge>
                     </Button>
                   </DropdownMenuTrigger>
@@ -213,7 +225,9 @@ export function Header() {
                       {/* Balance */}
                       {balance !== undefined && (
                         <div className="space-y-1">
-                          <div className="text-sm font-medium">Balance</div>
+                          <div className="text-sm font-medium">
+                            {t('lottery.yourBalance')}
+                          </div>
                           <div className="text-sm text-muted-foreground">
                             {formatBalance(balance)}
                           </div>
@@ -255,7 +269,7 @@ export function Header() {
                       onClick={disconnect}
                       className="text-red-600 focus:text-red-600"
                     >
-                      Disconnect Wallet
+                      {t('auth.disconnect')}
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -269,10 +283,14 @@ export function Header() {
                   >
                     <Wallet className="mr-2 h-4 w-4" />
                     <span className="hidden sm:inline">
-                      {isConnecting ? 'Connecting...' : 'Connect Wallet'}
+                      {isConnecting
+                        ? t('auth.connecting')
+                        : t('auth.connectWallet')}
                     </span>
                     <span className="sm:hidden">
-                      {isConnecting ? 'Connecting' : 'Connect'}
+                      {isConnecting
+                        ? t('auth.connecting')
+                        : t('auth.connectWallet')}
                     </span>
                   </Button>
 
@@ -315,12 +333,17 @@ export function Header() {
                 <DropdownMenuContent align="end" className="w-56">
                   <DropdownMenuItem asChild>
                     <Link href="/" className="w-full">
-                      Lottery
+                      {t('nav.home')}
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuItem asChild>
                     <Link href="/about" className="w-full">
-                      About
+                      {t('nav.about')}
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <Link href="/stats" className="w-full">
+                      {t('nav.stats')}
                     </Link>
                   </DropdownMenuItem>
                   {isConnected && chainInfo.chain && (

@@ -1,10 +1,13 @@
 // nextjs/src/components/common/Footer.tsx
 
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import { Github, Twitter, Mail } from 'lucide-react';
 import { APP_CONFIG } from '@/data/constants';
+import { LanguageSelector } from '@/components/common/LanguageSelector';
 
 export function Footer() {
+  const t = useTranslations();
   const currentYear = new Date().getFullYear();
 
   return (
@@ -23,18 +26,28 @@ export function Footer() {
               <p className="text-sm text-muted-foreground max-w-xs">
                 {APP_CONFIG.APP_DESCRIPTION}
               </p>
+
+              {/* Language Selector in Footer */}
+              <div className="pt-2">
+                <div className="text-xs font-medium text-muted-foreground mb-2">
+                  {t('common.language')}
+                </div>
+                <LanguageSelector />
+              </div>
             </div>
 
             {/* Quick Links */}
             <div className="space-y-4">
-              <h3 className="text-sm font-semibold">Quick Links</h3>
+              <h3 className="text-sm font-semibold">
+                {t('footer.quickLinks')}
+              </h3>
               <ul className="space-y-2 text-sm">
                 <li>
                   <Link
                     href="/"
                     className="text-muted-foreground hover:text-foreground transition-colors"
                   >
-                    Lottery
+                    {t('nav.home')}
                   </Link>
                 </li>
                 <li>
@@ -42,7 +55,7 @@ export function Footer() {
                     href="/about"
                     className="text-muted-foreground hover:text-foreground transition-colors"
                   >
-                    About
+                    {t('nav.about')}
                   </Link>
                 </li>
                 <li>
@@ -50,7 +63,7 @@ export function Footer() {
                     href="/about#how-it-works"
                     className="text-muted-foreground hover:text-foreground transition-colors"
                   >
-                    How It Works
+                    {t('footer.howItWorks')}
                   </Link>
                 </li>
                 <li>
@@ -58,7 +71,7 @@ export function Footer() {
                     href="/about#faq"
                     className="text-muted-foreground hover:text-foreground transition-colors"
                   >
-                    FAQ
+                    {t('footer.faq')}
                   </Link>
                 </li>
               </ul>
@@ -66,14 +79,14 @@ export function Footer() {
 
             {/* Support */}
             <div className="space-y-4">
-              <h3 className="text-sm font-semibold">Support</h3>
+              <h3 className="text-sm font-semibold">{t('footer.support')}</h3>
               <ul className="space-y-2 text-sm">
                 <li>
                   <a
                     href={`mailto:${APP_CONFIG.SUPPORT_EMAIL}`}
                     className="text-muted-foreground hover:text-foreground transition-colors"
                   >
-                    Contact Us
+                    {t('footer.contactUs')}
                   </a>
                 </li>
                 <li>
@@ -81,7 +94,7 @@ export function Footer() {
                     href="/about#transparency"
                     className="text-muted-foreground hover:text-foreground transition-colors"
                   >
-                    Transparency
+                    {t('footer.transparency')}
                   </Link>
                 </li>
                 <li>
@@ -89,7 +102,7 @@ export function Footer() {
                     href="/about#security"
                     className="text-muted-foreground hover:text-foreground transition-colors"
                   >
-                    Security
+                    {t('footer.security')}
                   </Link>
                 </li>
               </ul>
@@ -97,7 +110,7 @@ export function Footer() {
 
             {/* Social & Stats */}
             <div className="space-y-4">
-              <h3 className="text-sm font-semibold">Connect</h3>
+              <h3 className="text-sm font-semibold">{t('footer.connect')}</h3>
               <div className="flex space-x-4">
                 <a
                   href={`https://twitter.com/${APP_CONFIG.TWITTER_HANDLE.replace(
@@ -133,15 +146,15 @@ export function Footer() {
               <div className="space-y-2 text-xs text-muted-foreground">
                 <div className="flex items-center space-x-1">
                   <div className="h-1.5 w-1.5 rounded-full bg-green-500" />
-                  <span>Fully On-Chain</span>
+                  <span>{t('footer.fullyOnChain')}</span>
                 </div>
                 <div className="flex items-center space-x-1">
                   <div className="h-1.5 w-1.5 rounded-full bg-blue-500" />
-                  <span>Chainlink VRF</span>
+                  <span>{t('footer.chainlinkVRF')}</span>
                 </div>
                 <div className="flex items-center space-x-1">
                   <div className="h-1.5 w-1.5 rounded-full bg-purple-500" />
-                  <span>Open Source</span>
+                  <span>{t('footer.openSource')}</span>
                 </div>
               </div>
             </div>
@@ -150,7 +163,8 @@ export function Footer() {
           {/* Bottom Bar */}
           <div className="mt-8 pt-8 border-t flex flex-col sm:flex-row justify-between items-center space-y-4 sm:space-y-0">
             <div className="text-xs text-muted-foreground">
-              © {currentYear} {APP_CONFIG.APP_NAME}. All rights reserved.
+              © {currentYear} {APP_CONFIG.APP_NAME}.{' '}
+              {t('footer.allRightsReserved')}
             </div>
 
             <div className="flex items-center space-x-4 text-xs text-muted-foreground">
@@ -158,18 +172,18 @@ export function Footer() {
                 href="/terms"
                 className="hover:text-foreground transition-colors"
               >
-                Terms
+                {t('footer.terms')}
               </Link>
               <Link
                 href="/privacy"
                 className="hover:text-foreground transition-colors"
               >
-                Privacy
+                {t('footer.privacy')}
               </Link>
               <span className="flex items-center space-x-1">
-                <span>Made with</span>
+                <span>{t('footer.madeWith')}</span>
                 <span className="text-red-500">♥</span>
-                <span>for Web3</span>
+                <span>{t('footer.forWeb3')}</span>
               </span>
             </div>
           </div>
