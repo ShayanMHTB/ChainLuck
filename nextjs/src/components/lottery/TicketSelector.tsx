@@ -24,14 +24,13 @@ export function TicketSelector({
   return (
     <div className="space-y-4">
       <div className="text-center space-y-2">
-        <h3 className="text-lg font-semibold">Choose Your Tickets</h3>
         <p className="text-sm text-muted-foreground">
           Each purchase includes a guaranteed win! Prices updated to match smart
           contract.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
         {TICKET_OPTIONS.map((option) => {
           const isSelected = selectedMultiplier === option.multiplier;
 

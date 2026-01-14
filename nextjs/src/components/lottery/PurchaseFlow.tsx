@@ -19,7 +19,7 @@ import { useChainLuckContract } from '@/hooks/useChainLuckContract';
 import { useUSDCContract } from '@/hooks/useChainLuckContract';
 import { WinAnimation } from '@/components/lottery/WinAnimation';
 import { TicketCount, TicketPurchaseResult } from '@/types/lottery';
-import { formatCurrency, calculateGuaranteedWin } from '@/data/constants';
+import { formatCurrency } from '@/data/constants';
 
 interface PurchaseFlowProps {
   selectedMultiplier: TicketCount;
@@ -27,13 +27,7 @@ interface PurchaseFlowProps {
   onPurchaseComplete?: (result: TicketPurchaseResult) => void;
 }
 
-type PurchaseStep =
-  | 'review'
-  | 'approve'
-  | 'purchase'
-  | 'confirming'
-  | 'success'
-  | 'error';
+type PurchaseStep = 'ready' | 'processing' | 'success' | 'error';
 
 export function PurchaseFlow({
   selectedMultiplier,
@@ -51,100 +45,91 @@ export function PurchaseFlow({
 
   const {
     usdcBalance,
-    usdcAllowance,
     approveUSDCForLottery,
     isApproving,
     getTestUSDC,
     isFauceting,
     hasEnoughBalance,
-    hasEnoughAllowance,
-    needsApproval,
   } = useUSDCContract();
 
-  const [currentStep, setCurrentStep] = useState<PurchaseStep>('review');
+  const [currentStep, setCurrentStep] = useState<PurchaseStep>('ready');
   const [showAnimation, setShowAnimation] = useState(false);
+  const [needsApprovalRetry, setNeedsApprovalRetry] = useState(false);
 
   const guaranteedWin = getGuaranteedWinUSD(selectedMultiplier);
 
   // Update step based on state changes
   useEffect(() => {
-    if (!isConnected) {
-      setCurrentStep('review');
-      return;
-    }
-
     if (lastPurchaseResult) {
       if (lastPurchaseResult.success) {
         setCurrentStep('success');
         setShowAnimation(true);
+        setNeedsApprovalRetry(false);
         onPurchaseComplete?.(lastPurchaseResult);
       } else {
-        setCurrentStep('error');
+        // Check if error is due to insufficient allowance
+        const errorMessage = lastPurchaseResult.error?.toLowerCase() || '';
+        if (
+          errorMessage.includes('allowance') ||
+          errorMessage.includes('approve') ||
+          errorMessage.includes('erc20: insufficient allowance')
+        ) {
+          setNeedsApprovalRetry(true);
+          setCurrentStep('ready');
+        } else {
+          setCurrentStep('error');
+          setNeedsApprovalRetry(false);
+        }
       }
       return;
     }
 
-    if (isPurchasing) {
-      setCurrentStep('confirming');
+    if (isPurchasing || isApproving) {
+      setCurrentStep('processing');
       return;
     }
 
-    if (isApproving) {
-      setCurrentStep('approve');
-      return;
-    }
-
-    // Check if we need approval
-    if (isConnected && needsApproval(totalPrice)) {
-      setCurrentStep('approve');
-      return;
-    }
-
-    setCurrentStep('review');
-  }, [
-    isConnected,
-    isPurchasing,
-    isApproving,
-    lastPurchaseResult,
-    needsApproval,
-    totalPrice,
-    onPurchaseComplete,
-  ]);
+    setCurrentStep('ready');
+  }, [isPurchasing, isApproving, lastPurchaseResult, onPurchaseComplete]);
 
   const handleConnect = async () => {
     await connect();
   };
 
-  const handleApprove = async () => {
-    // Approve a larger amount to avoid repeated approvals
-    const approvalAmount = Math.max(totalPrice, 1000); // At least $1000
-    await approveUSDCForLottery(approvalAmount);
-  };
-
   const handlePurchase = async () => {
     if (!hasEnoughBalance(totalPrice)) {
-      // Show insufficient balance error or offer faucet
-      return;
+      return; // Button should be disabled anyway
     }
 
+    setNeedsApprovalRetry(false);
     await purchaseTickets(selectedMultiplier);
   };
 
+  const handleApproveAndRetry = async () => {
+    // Approve a reasonable amount to avoid repeated approvals
+    const approvalAmount = Math.max(totalPrice * 3, 1000); // 3x current purchase or $1000 minimum
+    await approveUSDCForLottery(approvalAmount);
+
+    // After approval, automatically retry the purchase
+    setTimeout(() => {
+      if (!isPurchasing && !isApproving) {
+        handlePurchase();
+      }
+    }, 1000);
+  };
+
   const handleTryAgain = () => {
-    setCurrentStep('review');
+    setCurrentStep('ready');
     setShowAnimation(false);
+    setNeedsApprovalRetry(false);
   };
 
   const getStepProgress = (): number => {
     switch (currentStep) {
-      case 'review':
+      case 'ready':
         return 0;
-      case 'approve':
-        return 25;
-      case 'purchase':
+      case 'processing':
         return 50;
-      case 'confirming':
-        return 75;
       case 'success':
         return 100;
       case 'error':
@@ -187,11 +172,11 @@ export function PurchaseFlow({
   return (
     <Card>
       <CardContent className="pt-6 space-y-4">
-        {/* Progress Bar */}
-        {isConnected && (
+        {/* Progress Bar - Only show when processing */}
+        {currentStep === 'processing' && (
           <div className="space-y-2">
             <div className="flex justify-between text-xs text-muted-foreground">
-              <span>Purchase Progress</span>
+              <span>Processing Transaction</span>
               <span>{getStepProgress()}%</span>
             </div>
             <Progress value={getStepProgress()} className="h-2" />
@@ -203,10 +188,10 @@ export function PurchaseFlow({
           <div className="text-center space-y-1">
             <h3 className="text-lg font-semibold">Purchase Summary</h3>
             <p className="text-sm text-muted-foreground">
-              {currentStep === 'approve' && 'Approve USDC spending first'}
-              {currentStep === 'purchase' && 'Ready to purchase tickets'}
-              {currentStep === 'confirming' && 'Confirming transaction...'}
-              {currentStep === 'review' && 'Review your ticket selection'}
+              {currentStep === 'processing' && 'Processing transaction...'}
+              {currentStep === 'ready' && 'Ready to purchase tickets'}
+              {currentStep === 'error' && 'Transaction failed'}
+              {currentStep === 'success' && 'Purchase successful!'}
             </p>
           </div>
 
@@ -236,9 +221,9 @@ export function PurchaseFlow({
           </div>
         </div>
 
-        {/* Balance Information */}
+        {/* Balance Information - Only show if connected */}
         {isConnected && (
-          <div className="bg-muted/30 rounded-lg p-3 space-y-2">
+          <div className="bg-muted/30 rounded-lg p-3">
             <div className="flex justify-between items-center text-sm">
               <span>Your USDC Balance:</span>
               <span
@@ -251,28 +236,44 @@ export function PurchaseFlow({
                 {formatCurrency(usdcBalance)}
               </span>
             </div>
-            <div className="flex justify-between items-center text-sm">
-              <span>USDC Allowance:</span>
-              <span
-                className={`font-medium ${
-                  hasEnoughAllowance(totalPrice)
-                    ? 'text-green-600'
-                    : 'text-orange-600'
-                }`}
-              >
-                {formatCurrency(usdcAllowance)}
-              </span>
-            </div>
           </div>
         )}
 
         {/* Error Display */}
-        {(currentStep === 'error' || lastPurchaseResult?.error) && (
+        {currentStep === 'error' && lastPurchaseResult?.error && (
           <Alert variant="destructive">
             <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{lastPurchaseResult.error}</AlertDescription>
+          </Alert>
+        )}
+
+        {/* Approval Needed Alert */}
+        {needsApprovalRetry && (
+          <Alert>
+            <CheckCircle className="h-4 w-4" />
             <AlertDescription>
-              {lastPurchaseResult?.error ||
-                'Purchase failed. Please try again.'}
+              <div className="space-y-2">
+                <div>
+                  Transaction failed because USDC spending needs to be approved
+                  first.
+                </div>
+                <Button
+                  onClick={handleApproveAndRetry}
+                  disabled={isApproving}
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                >
+                  {isApproving ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Approving USDC...
+                    </>
+                  ) : (
+                    'Approve USDC & Buy Tickets'
+                  )}
+                </Button>
+              </div>
             </AlertDescription>
           </Alert>
         )}
@@ -283,7 +284,7 @@ export function PurchaseFlow({
             <AlertCircle className="h-4 w-4" />
             <AlertDescription className="space-y-2">
               <div>
-                Insufficient USDC balance for this purchase. You have{' '}
+                Insufficient USDC balance. You have{' '}
                 {formatCurrency(usdcBalance)}, but need{' '}
                 {formatCurrency(totalPrice)}.
               </div>
@@ -301,13 +302,13 @@ export function PurchaseFlow({
                       Getting Test USDC...
                     </>
                   ) : (
-                    'Get Test USDC'
+                    'Get Test USDC (10,000 USDC)'
                   )}
                 </Button>
               )}
               {currentChainId !== 1337 && (
                 <div className="text-sm text-muted-foreground">
-                  Faucet is only available on localhost network (Chain ID 1337)
+                  Please add USDC to your wallet to continue
                 </div>
               )}
             </AlertDescription>
@@ -325,26 +326,7 @@ export function PurchaseFlow({
               <Wallet className="mr-2 h-5 w-5" />
               Connect Wallet to Play
             </Button>
-          ) : currentStep === 'approve' ? (
-            <Button
-              onClick={handleApprove}
-              disabled={isApproving || !hasEnoughBalance(totalPrice)}
-              className="w-full h-12 text-base"
-              size="lg"
-            >
-              {isApproving ? (
-                <>
-                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                  Approving USDC...
-                </>
-              ) : (
-                <>
-                  <CheckCircle className="mr-2 h-5 w-5" />
-                  Approve USDC Spending
-                </>
-              )}
-            </Button>
-          ) : currentStep === 'error' ? (
+          ) : currentStep === 'error' && !needsApprovalRetry ? (
             <Button
               onClick={handleTryAgain}
               className="w-full h-12 text-base"
@@ -357,19 +339,17 @@ export function PurchaseFlow({
             <Button
               onClick={handlePurchase}
               disabled={
-                isPurchasing ||
+                currentStep === 'processing' ||
                 !hasEnoughBalance(totalPrice) ||
-                needsApproval(totalPrice)
+                needsApprovalRetry
               }
               className="w-full h-12 text-base"
               size="lg"
             >
-              {isPurchasing ? (
+              {currentStep === 'processing' ? (
                 <>
                   <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                  {currentStep === 'confirming'
-                    ? 'Confirming...'
-                    : 'Processing...'}
+                  Processing Transaction...
                 </>
               ) : (
                 <>
