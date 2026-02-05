@@ -1,0 +1,73 @@
+{
+  "nav": {
+    "home": "لاتری",
+    "dashboard": "داشبورد",
+    "stats": "آمار",
+    "about": "درباره ما"
+  },
+  "auth": {
+    "connectWallet": "اتصال کیف پول",
+    "disconnect": "قطع اتصال",
+    "connecting": "در حال اتصال...",
+    "connected": "متصل",
+    "loginRequired": "لطفاً کیف پول خود را متصل کنید"
+  },
+  "lottery": {
+    "buyTicket": "خرید بلیط",
+    "ticketPrice": "قیمت بلیط",
+    "totalPrizePool": "مجموع جوایز",
+    "yourBalance": "موجودی شما",
+    "recentWins": "برندگان اخیر",
+    "pendingWins": "جوایز در انتظار",
+    "guaranteedWin": "جایزه تضمینی",
+    "purchaseSuccess": "بلیط با موفقیت خریداری شد!",
+    "purchaseError": "خرید بلیط ناموفق بود"
+  },
+  "dashboard": {
+    "welcome": "خوش آمدید!",
+    "totalSpent": "مجموع خرج شده",
+    "totalWon": "مجموع برده شده",
+    "netResult": "نتیجه خالص",
+    "ticketsPurchased": "بلیط های خریداری شده",
+    "referralEarnings": "درآمد از معرفی",
+    "activityFeed": "فعالیت های اخیر"
+  },
+  "referral": {
+    "inviteFriends": "دعوت از دوستان",
+    "referralLink": "لینک معرفی شما",
+    "copyLink": "کپی لینک",
+    "linkCopied": "لینک کپی شد!",
+    "earnPerReferral": "۴ دلار برای هر معرفی موفق",
+    "referralCount": "تعداد کل معرفی ها"
+  },
+  "footer": {
+    "quickLinks": "لینک های سریع",
+    "howItWorks": "نحوه کار",
+    "faq": "سوالات متداول",
+    "support": "پشتیبانی",
+    "contactUs": "تماس با ما",
+    "transparency": "شفافیت",
+    "security": "امنیت",
+    "connect": "ارتباط",
+    "fullyOnChain": "کاملاً روی بلاکچین",
+    "chainlinkVRF": "چینلینک VRF",
+    "openSource": "متن باز",
+    "allRightsReserved": "تمام حقوق محفوظ است",
+    "terms": "شرایط",
+    "privacy": "حریم خصوصی",
+    "madeWith": "ساخته شده با",
+    "forWeb3": "برای وب۳"
+  },
+  "common": {
+    "loading": "در حال بارگذاری...",
+    "error": "خطا",
+    "success": "موفقیت",
+    "confirm": "تأیید",
+    "cancel": "لغو",
+    "close": "بستن",
+    "viewMore": "مشاهده بیشتر",
+    "language": "زبان",
+    "copy": "کپی",
+    "copied": "کپی شد!"
+  }
+}
