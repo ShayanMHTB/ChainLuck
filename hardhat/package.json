@@ -1,37 +1,32 @@
 {
-  "name": "chainluck-hardhat",
+  "name": "chainluck-contracts",
   "version": "1.0.0",
-  "description": "ChainLuck Lottery Smart Contracts",
+  "description": "ChainLuck Smart Contracts for Sepolia Testnet",
   "main": "index.js",
   "scripts": {
-    "compile": "npx hardhat compile",
-    "test": "npx hardhat test",
-    "coverage": "npx hardhat coverage",
     "clean": "npx hardhat clean",
-    "deploy:local": "npx hardhat run scripts/deploy.ts --network localhost",
-    "deploy:mumbai": "npx hardhat run scripts/deploy.ts --network mumbai",
-    "deploy:polygon": "npx hardhat run scripts/deploy.ts --network polygon",
-    "deploy:bsc-testnet": "npx hardhat run scripts/deploy.ts --network bscTestnet",
-    "deploy:bsc": "npx hardhat run scripts/deploy.ts --network bsc",
-    "setup-wallets:local": "npx hardhat run scripts/setup-test-wallets.ts --network localhost",
-    "setup-wallets:mumbai": "npx hardhat run scripts/setup-test-wallets.ts --network mumbai",
-    "test-interactions:local": "npx hardhat run scripts/test-interactions.ts --network localhost",
-    "test-interactions:mumbai": "npx hardhat run scripts/test-interactions.ts --network mumbai",
-    "verify:mumbai": "npx hardhat verify --network mumbai",
-    "verify:polygon": "npx hardhat verify --network polygon",
-    "verify:bsc": "npx hardhat verify --network bsc",
+    "compile": "npx hardhat compile",
+    "console": "npx hardhat console --network sepolia",
+    "deploy": "npx hardhat run scripts/deploy.ts --network sepolia",
+    "deploy:all": "npm run compile && npm run deploy && npm run verify && npm run fund",
+    "verify": "npx hardhat run scripts/verify.ts --network sepolia",
+    "fund": "npx hardhat run scripts/fund-pools.ts --network sepolia",
+    "fund:wallets": "npx hardhat run scripts/fund-test-wallets.ts --network sepolia",
+    "setup": "npx hardhat run scripts/setup-wallets.ts --network sepolia",
+    "setup:dev": "npm run deploy:all && npm run setup && npm run fund:wallets",
+    "setup:complete": "npm run setup && npm run fund:wallets",
+    "test": "npx hardhat test",
+    "test:gas": "REPORT_GAS=true npx hardhat test",
+    "test:game": "npx hardhat run scripts/test-gameplay.ts --network sepolia",
     "node": "npx hardhat node",
-    "console:local": "npx hardhat console --network localhost",
-    "console:mumbai": "npx hardhat console --network mumbai",
-    "flatten": "npx hardhat flatten contracts/ChainLuckLottery.sol > flattened.sol",
-    "size": "npx hardhat size-contracts",
-    "gas-report": "REPORT_GAS=true npx hardhat test"
+    "flatten": "npx hardhat flatten contracts/ChainLuck.sol > flattened.sol",
+    "size": "npx hardhat size-contracts"
   },
   "keywords": [
     "blockchain",
     "lottery",
-    "defi",
-    "polygon",
+    "ethereum",
+    "sepolia",
     "chainlink"
   ],
   "author": "ChainLuck Team",
@@ -46,7 +41,7 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
-    "@chainlink/contracts": "^1.4.0",
+    "@chainlink/contracts": "^0.8.0",
     "@openzeppelin/contracts": "^5.3.0"
   }
 }

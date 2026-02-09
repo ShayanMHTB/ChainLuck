@@ -8,8 +8,9 @@ import {
   useWatchContractEvent,
   useAccount,
   useChainId,
+  useGasPrice,
+  useEstimateGas,
 } from 'wagmi';
-import { parseUnits, formatUnits } from 'viem';
 import { toast } from 'sonner';
 import {
   CHAINLUCK_LOTTERY_ABI,
@@ -19,7 +20,9 @@ import {
   parseUSDCAmount,
   getTicketPriceUSD,
   getGuaranteedWinUSD,
+  isContractDeployed,
 } from '@/lib/contracts';
+import { getSepoliaGasConfig, SEPOLIA_GAS_CONFIG } from '@/lib/wagmi';
 
 // =============================================================================
 // TYPES
@@ -44,16 +47,146 @@ export interface TicketPurchaseResult {
   success: boolean;
   hash?: string;
   error?: string;
+  ticketCount?: number;
+  totalCost?: number;
   guaranteedWin?: number;
   grandPrizeWins?: Array<{
     amount: number;
     prizeIndex: number;
   }>;
+  timestamp?: Date;
 }
 
 export interface GrandPrizeInfo {
   amounts: number[];
   odds: number[];
+}
+
+// =============================================================================
+// ENHANCED ERROR PARSING FOR SEPOLIA
+// =============================================================================
+
+function parseContractError(error: any): string {
+  if (!error) return 'Unknown error occurred';
+
+  const message = error.message || error.toString();
+  console.error('🚨 Contract Error Details:', { error, message });
+
+  // Gas-related errors (common on Sepolia)
+  if (message.includes('gas') || message.includes('Gas')) {
+    if (message.includes('insufficient funds for gas')) {
+      return 'Insufficient SepoliaETH for gas fees. Please get more SepoliaETH from a faucet.';
+    }
+    if (message.includes('gas limit')) {
+      return 'Transaction requires more gas. This might be a network issue, please try again.';
+    }
+    if (message.includes('gas price')) {
+      return 'Gas price too low for Sepolia network. The transaction will be retried with higher gas.';
+    }
+    return 'Gas estimation failed. Please try again with higher gas settings.';
+  }
+
+  // Network-specific errors
+  if (message.includes('network') || message.includes('Network')) {
+    if (message.includes('Sepolia')) {
+      return 'Sepolia network issue. Please check your connection and try again.';
+    }
+    return 'Network error. Please check your connection and try again.';
+  }
+
+  // Transaction errors
+  if (message.includes('transaction underpriced')) {
+    return 'Transaction fee too low for Sepolia. Please try again.';
+  }
+
+  if (message.includes('nonce too low') || message.includes('nonce')) {
+    return 'Transaction nonce issue. Please reset your MetaMask account or try again.';
+  }
+
+  if (message.includes('replacement transaction underpriced')) {
+    return 'Previous transaction pending. Please wait or increase gas price.';
+  }
+
+  // Contract-specific errors
+  if (
+    message.includes('insufficient allowance') ||
+    message.includes('ERC20InsufficientAllowance')
+  ) {
+    return 'USDC spending not approved. Please approve USDC first.';
+  }
+
+  if (
+    message.includes('insufficient balance') ||
+    message.includes('ERC20InsufficientBalance')
+  ) {
+    return 'Insufficient USDC balance for this purchase.';
+  }
+
+  if (message.includes('User rejected') || message.includes('user rejected')) {
+    return 'Transaction was cancelled by user.';
+  }
+
+  if (message.includes('revert') || message.includes('execution reverted')) {
+    const revertMatch = message.match(/revert (.+?)(?:\s|$|\.)/);
+    if (revertMatch) {
+      return `Transaction failed: ${revertMatch[1]}`;
+    }
+    return 'Transaction was reverted by the contract.';
+  }
+
+  // Chain errors
+  if (message.includes('chain') || message.includes('Chain')) {
+    return 'Please make sure you are connected to Sepolia testnet.';
+  }
+
+  // Default fallback
+  return 'Transaction failed. Please try again with higher gas settings.';
+}
+
+// =============================================================================
+// GAS ESTIMATION HELPER
+// =============================================================================
+
+function useSepoliaGasEstimation() {
+  const { data: gasPrice } = useGasPrice({
+    chainId: 11155111, // Sepolia
+  });
+
+  const getGasSettings = (functionName?: string) => {
+    // Use current gas price with safety multiplier
+    const currentGasPrice = gasPrice || BigInt(SEPOLIA_GAS_CONFIG.gasPrice);
+    const safeGasPrice = (currentGasPrice * BigInt(150)) / BigInt(100); // 50% buffer
+
+    const gasConfig = {
+      gasPrice: safeGasPrice,
+      maxFeePerGas: safeGasPrice * BigInt(2), // Allow 2x current gas price
+      maxPriorityFeePerGas: BigInt(SEPOLIA_GAS_CONFIG.maxPriorityFeePerGas),
+    };
+
+    // Add gas limit if function specified
+    if (
+      functionName &&
+      SEPOLIA_GAS_CONFIG.gasLimits[
+        functionName as keyof typeof SEPOLIA_GAS_CONFIG.gasLimits
+      ]
+    ) {
+      return {
+        ...gasConfig,
+        gas:
+          (BigInt(
+            SEPOLIA_GAS_CONFIG.gasLimits[
+              functionName as keyof typeof SEPOLIA_GAS_CONFIG.gasLimits
+            ],
+          ) *
+            BigInt(130)) /
+          BigInt(100), // 30% buffer
+      };
+    }
+
+    return gasConfig;
+  };
+
+  return { getGasSettings };
 }
 
 // =============================================================================
@@ -64,6 +197,23 @@ export function useChainLuckContract() {
   const { address } = useAccount();
   const chainId = useChainId();
   const contracts = getContractAddresses(chainId);
+  const { getGasSettings } = useSepoliaGasEstimation();
+
+  // Check if contracts are deployed on current chain
+  const contractsDeployed = isContractDeployed(chainId);
+
+  // Debug logging
+  useEffect(() => {
+    console.log('🎲 ChainLuck Contract Hook Debug:', {
+      chainId,
+      chainName: chainId === 11155111 ? 'Sepolia' : 'Other',
+      address,
+      contracts,
+      contractsDeployed,
+      lotteryAddress: contracts.chainluckLottery,
+      usdcAddress: contracts.usdc,
+    });
+  }, [chainId, address, contracts, contractsDeployed]);
 
   // =============================================================================
   // CONTRACT STATS
@@ -73,12 +223,16 @@ export function useChainLuckContract() {
     data: contractStatsRaw,
     isLoading: isLoadingStats,
     refetch: refetchStats,
+    error: statsError,
   } = useReadContract({
     address: contracts.chainluckLottery,
     abi: CHAINLUCK_LOTTERY_ABI,
     functionName: 'getContractStats',
     query: {
-      refetchInterval: 30000, // Refetch every 30 seconds
+      enabled: !!contracts.chainluckLottery && contractsDeployed,
+      refetchInterval: 30000,
+      retry: 3,
+      retryDelay: 2000,
     },
   });
 
@@ -100,14 +254,17 @@ export function useChainLuckContract() {
     data: userStatsRaw,
     isLoading: isLoadingUserStats,
     refetch: refetchUserStats,
+    error: userStatsError,
   } = useReadContract({
     address: contracts.chainluckLottery,
     abi: CHAINLUCK_LOTTERY_ABI,
     functionName: 'getUserStats',
     args: address ? [address] : undefined,
     query: {
-      enabled: !!address,
-      refetchInterval: 15000, // Refetch every 15 seconds
+      enabled: !!address && !!contracts.chainluckLottery && contractsDeployed,
+      refetchInterval: 15000,
+      retry: 3,
+      retryDelay: 2000,
     },
   });
 
@@ -124,10 +281,15 @@ export function useChainLuckContract() {
   // GRAND PRIZE INFO
   // =============================================================================
 
-  const { data: grandPrizeInfoRaw } = useReadContract({
+  const { data: grandPrizeInfoRaw, error: grandPrizeError } = useReadContract({
     address: contracts.chainluckLottery,
     abi: CHAINLUCK_LOTTERY_ABI,
     functionName: 'getGrandPrizeInfo',
+    query: {
+      enabled: !!contracts.chainluckLottery && contractsDeployed,
+      retry: 3,
+      retryDelay: 2000,
+    },
   });
 
   const grandPrizeInfo: GrandPrizeInfo | undefined = grandPrizeInfoRaw
@@ -138,7 +300,7 @@ export function useChainLuckContract() {
     : undefined;
 
   // =============================================================================
-  // TICKET PURCHASE
+  // TICKET PURCHASE WITH PROPER GAS HANDLING
   // =============================================================================
 
   const {
@@ -146,6 +308,7 @@ export function useChainLuckContract() {
     data: purchaseHash,
     error: purchaseError,
     isPending: isPurchasing,
+    reset: resetPurchase,
   } = useWriteContract();
 
   const {
@@ -162,42 +325,82 @@ export function useChainLuckContract() {
 
   // Handle purchase completion
   useEffect(() => {
-    if (isConfirmed && receipt) {
+    if (isConfirmed && receipt && purchaseHash) {
+      console.log('✅ Purchase Confirmed:', receipt);
+
       // Parse events from receipt to get win information
-      const guaranteedWin = getGuaranteedWinUSD(1); // Will be updated based on actual ticket count
+      let guaranteedWin = 0;
+      let grandPrizeWins: Array<{ amount: number; prizeIndex: number }> = [];
+
+      try {
+        // Look for TicketsPurchased event
+        guaranteedWin = getGuaranteedWinUSD(1); // Fallback value
+
+        // TODO: Parse actual events from receipt logs
+        // For now, use estimated values
+      } catch (error) {
+        console.error('❌ Error parsing events:', error);
+        guaranteedWin = getGuaranteedWinUSD(1);
+      }
 
       const result: TicketPurchaseResult = {
         success: true,
         hash: receipt.transactionHash,
+        ticketCount: 1, // Would get from transaction data
+        totalCost: getTicketPriceUSD(1), // Would get from transaction data
         guaranteedWin,
-        grandPrizeWins: [], // Will be populated from events
+        grandPrizeWins,
+        timestamp: new Date(),
       };
 
       setLastPurchaseResult(result);
 
       // Refetch stats after successful purchase
-      refetchStats();
-      refetchUserStats();
+      setTimeout(() => {
+        refetchStats();
+        refetchUserStats();
+      }, 2000);
 
-      toast.success('Tickets purchased successfully!', {
-        description: `You won at least $${guaranteedWin.toFixed(2)}!`,
-      });
+      // Show success notification
+      const totalWin =
+        guaranteedWin +
+        grandPrizeWins.reduce((sum, win) => sum + win.amount, 0);
+
+      if (grandPrizeWins.length > 0) {
+        toast.success('🏆 GRAND PRIZE WON! 🏆', {
+          description: `You won $${totalWin.toFixed(
+            2,
+          )} including a grand prize!`,
+          duration: 8000,
+        });
+      } else {
+        toast.success('🎉 Tickets purchased successfully!', {
+          description: `You won $${guaranteedWin.toFixed(2)} guaranteed!`,
+          duration: 5000,
+        });
+      }
     }
-  }, [isConfirmed, receipt, refetchStats, refetchUserStats]);
+  }, [isConfirmed, receipt, purchaseHash, refetchStats, refetchUserStats]);
 
   // Handle purchase errors
   useEffect(() => {
     if (purchaseError || confirmError) {
       const error = purchaseError || confirmError;
+      console.error('❌ Purchase Error:', error);
+
+      const friendlyError = parseContractError(error);
+
       const result: TicketPurchaseResult = {
         success: false,
-        error: error?.message || 'Transaction failed',
+        error: friendlyError,
+        timestamp: new Date(),
       };
 
       setLastPurchaseResult(result);
 
       toast.error('Purchase failed', {
-        description: result.error,
+        description: friendlyError,
+        duration: 8000,
       });
     }
   }, [purchaseError, confirmError]);
@@ -208,21 +411,70 @@ export function useChainLuckContract() {
       return;
     }
 
+    if (!contractsDeployed) {
+      toast.error(
+        'Contracts not deployed on this network. Please switch to Sepolia.',
+      );
+      return;
+    }
+
+    if (chainId !== 11155111) {
+      toast.error('Please switch to Sepolia testnet to use ChainLuck');
+      return;
+    }
+
+    console.log(
+      '🎫 Attempting to purchase tickets with Sepolia gas optimization:',
+      {
+        ticketCount,
+        address,
+        chainId,
+        contractAddress: contracts.chainluckLottery,
+        estimatedCost: getTicketPriceUSD(ticketCount),
+      },
+    );
+
     try {
+      // Reset previous results
+      setLastPurchaseResult(null);
+      resetPurchase();
+
+      // Get optimized gas settings for Sepolia
+      const gasSettings = getGasSettings('buyTickets');
+
+      console.log('💰 Using Sepolia gas settings:', {
+        gasPrice: gasSettings.gasPrice?.toString(),
+        maxFeePerGas: gasSettings.maxFeePerGas?.toString(),
+        maxPriorityFeePerGas: gasSettings.maxPriorityFeePerGas?.toString(),
+        gas: gasSettings.gas?.toString(),
+      });
+
       buyTickets({
         address: contracts.chainluckLottery,
         abi: CHAINLUCK_LOTTERY_ABI,
         functionName: 'buyTickets',
         args: [BigInt(ticketCount)],
+        // CRITICAL: Add gas settings for Sepolia
+        ...gasSettings,
       });
     } catch (error) {
-      console.error('Error purchasing tickets:', error);
-      toast.error('Failed to initiate purchase');
+      console.error('❌ Error initiating purchase:', error);
+
+      const result: TicketPurchaseResult = {
+        success: false,
+        error: parseContractError(error),
+        timestamp: new Date(),
+      };
+
+      setLastPurchaseResult(result);
+      toast.error('Failed to initiate purchase', {
+        description: parseContractError(error),
+      });
     }
   };
 
   // =============================================================================
-  // CLAIM WINS
+  // CLAIM WINS WITH PROPER GAS HANDLING
   // =============================================================================
 
   const {
@@ -243,8 +495,14 @@ export function useChainLuckContract() {
   // Handle claim completion
   useEffect(() => {
     if (isClaimConfirmed) {
-      refetchUserStats();
-      toast.success('Wins claimed successfully!');
+      console.log('✅ Claim Confirmed');
+      setTimeout(() => {
+        refetchUserStats();
+      }, 2000);
+      toast.success('🎉 Wins claimed successfully!', {
+        description: 'Funds have been transferred to your wallet',
+        duration: 5000,
+      });
     }
   }, [isClaimConfirmed, refetchUserStats]);
 
@@ -252,8 +510,11 @@ export function useChainLuckContract() {
   useEffect(() => {
     if (claimError || claimConfirmError) {
       const error = claimError || claimConfirmError;
+      console.error('❌ Claim Error:', error);
+
       toast.error('Claim failed', {
-        description: error?.message || 'Failed to claim wins',
+        description: parseContractError(error),
+        duration: 6000,
       });
     }
   }, [claimError, claimConfirmError]);
@@ -264,20 +525,40 @@ export function useChainLuckContract() {
       return;
     }
 
+    if (!contractsDeployed) {
+      toast.error(
+        'Contracts not deployed on this network. Please switch to Sepolia.',
+      );
+      return;
+    }
+
     if (!userStats?.pendingWins || userStats.pendingWins === 0) {
       toast.error('No pending wins to claim');
       return;
     }
 
+    console.log('💰 Attempting to claim wins:', {
+      address,
+      pendingAmount: userStats.pendingWins,
+      contractAddress: contracts.chainluckLottery,
+    });
+
     try {
+      // Get optimized gas settings for Sepolia
+      const gasSettings = getGasSettings('claimWins');
+
       claimWins({
         address: contracts.chainluckLottery,
         abi: CHAINLUCK_LOTTERY_ABI,
         functionName: 'claimWins',
+        // CRITICAL: Add gas settings for Sepolia
+        ...gasSettings,
       });
     } catch (error) {
-      console.error('Error claiming wins:', error);
-      toast.error('Failed to initiate claim');
+      console.error('❌ Error claiming wins:', error);
+      toast.error('Failed to initiate claim', {
+        description: parseContractError(error),
+      });
     }
   };
 
@@ -290,9 +571,13 @@ export function useChainLuckContract() {
     address: contracts.chainluckLottery,
     abi: CHAINLUCK_LOTTERY_ABI,
     eventName: 'TicketsPurchased',
+    enabled: contractsDeployed,
     onLogs: (logs) => {
+      console.log('🎫 Tickets Purchased Event:', logs);
       // Refetch stats when any user purchases tickets
-      refetchStats();
+      setTimeout(() => {
+        refetchStats();
+      }, 1000);
     },
   });
 
@@ -301,17 +586,44 @@ export function useChainLuckContract() {
     address: contracts.chainluckLottery,
     abi: CHAINLUCK_LOTTERY_ABI,
     eventName: 'GrandPrizeWon',
+    enabled: contractsDeployed,
     onLogs: (logs) => {
+      console.log('🏆 Grand Prize Won Event:', logs);
+
       logs.forEach((log) => {
         const { user, amount, prizeIndex } = log.args;
         if (user && amount !== undefined && prizeIndex !== undefined) {
           toast.success('🏆 Grand Prize Won!', {
-            description: `Someone won $${formatUSDCAmount(amount).toFixed(2)}!`,
+            description: `Someone won ${formatUSDCAmount(amount).toFixed(2)}!`,
             duration: 6000,
           });
         }
       });
-      refetchStats();
+
+      setTimeout(() => {
+        refetchStats();
+      }, 1000);
+    },
+  });
+
+  // Listen for wins claimed
+  useWatchContractEvent({
+    address: contracts.chainluckLottery,
+    abi: CHAINLUCK_LOTTERY_ABI,
+    eventName: 'WinsClaimed',
+    enabled: contractsDeployed && !!address,
+    onLogs: (logs) => {
+      console.log('💰 Wins Claimed Event:', logs);
+      // Only show notification if it's the current user
+      logs.forEach((log) => {
+        const { user } = log.args;
+        if (user && user.toLowerCase() === address?.toLowerCase()) {
+          // User specific claim - refetch their stats
+          setTimeout(() => {
+            refetchUserStats();
+          }, 1000);
+        }
+      });
     },
   });
 
@@ -348,24 +660,47 @@ export function useChainLuckContract() {
 
     // Contract addresses
     contracts,
+
+    // Network status
+    contractsDeployed,
+    chainId,
+    isSepoliaNetwork: chainId === 11155111,
+
+    // Reset function for clearing previous results
+    resetPurchaseResult: () => setLastPurchaseResult(null),
+
+    // Debug info
+    debug: {
+      statsError,
+      userStatsError,
+      grandPrizeError,
+      contractAddress: contracts.chainluckLottery,
+      usdcAddress: contracts.usdc,
+    },
   };
 }
 
 // =============================================================================
-// USDC CONTRACT HOOK
+// USDC CONTRACT HOOK (Enhanced for Sepolia Gas)
 // =============================================================================
 
 export function useUSDCContract() {
   const { address } = useAccount();
-  const chainId = useChainId(); // This gets chainId from wagmi
+  const chainId = useChainId();
   const contracts = getContractAddresses(chainId);
+  const contractsDeployed = isContractDeployed(chainId);
+  const { getGasSettings } = useSepoliaGasEstimation();
 
-  console.log('🔍 USDC Hook Debug:', {
-    address,
-    chainId,
-    usdcAddress: contracts.usdc,
-    lotteryAddress: contracts.chainluckLottery,
-  });
+  // Debug logging
+  useEffect(() => {
+    console.log('💵 USDC Contract Hook Debug:', {
+      chainId,
+      chainName: chainId === 11155111 ? 'Sepolia' : 'Other',
+      address,
+      usdcContract: contracts.usdc,
+      contractsDeployed,
+    });
+  }, [chainId, address, contracts, contractsDeployed]);
 
   // Get USDC balance
   const {
@@ -379,40 +714,42 @@ export function useUSDCContract() {
     functionName: 'balanceOf',
     args: address ? [address] : undefined,
     query: {
-      enabled: !!address,
-      refetchInterval: 10000, // Refetch every 10 seconds
+      enabled: !!address && !!contracts.usdc && contractsDeployed,
+      refetchInterval: 10000,
+      retry: 3,
+      retryDelay: 2000,
     },
   });
 
   const usdcBalance = balanceRaw ? formatUSDCAmount(balanceRaw) : 0;
-
-  console.log('💰 USDC Balance Debug:', {
-    balanceRaw: balanceRaw?.toString(),
-    usdcBalance,
-    isLoadingBalance,
-    balanceError: balanceError?.message,
-  });
 
   // Get USDC allowance for lottery contract
   const {
     data: allowanceRaw,
     isLoading: isLoadingAllowance,
     refetch: refetchAllowance,
+    error: allowanceError,
   } = useReadContract({
     address: contracts.usdc,
     abi: MOCK_USDC_ABI,
     functionName: 'allowance',
     args: address ? [address, contracts.chainluckLottery] : undefined,
     query: {
-      enabled: !!address,
+      enabled:
+        !!address &&
+        !!contracts.usdc &&
+        !!contracts.chainluckLottery &&
+        contractsDeployed,
       refetchInterval: 10000,
+      retry: 3,
+      retryDelay: 2000,
     },
   });
 
   const usdcAllowance = allowanceRaw ? formatUSDCAmount(allowanceRaw) : 0;
 
   // =============================================================================
-  // USDC APPROVAL
+  // USDC APPROVAL WITH PROPER GAS HANDLING
   // =============================================================================
 
   const {
@@ -433,8 +770,14 @@ export function useUSDCContract() {
   // Handle approval completion
   useEffect(() => {
     if (isApproveConfirmed) {
-      refetchAllowance();
-      toast.success('USDC approval successful!');
+      console.log('✅ USDC Approval Confirmed');
+      setTimeout(() => {
+        refetchAllowance();
+      }, 2000);
+      toast.success('✅ USDC approval successful!', {
+        description: 'You can now purchase tickets',
+        duration: 5000,
+      });
     }
   }, [isApproveConfirmed, refetchAllowance]);
 
@@ -442,8 +785,11 @@ export function useUSDCContract() {
   useEffect(() => {
     if (approveError || approveConfirmError) {
       const error = approveError || approveConfirmError;
+      console.error('❌ Approval Error:', error);
+
       toast.error('Approval failed', {
-        description: error?.message || 'Failed to approve USDC',
+        description: parseContractError(error),
+        duration: 6000,
       });
     }
   }, [approveError, approveConfirmError]);
@@ -454,22 +800,50 @@ export function useUSDCContract() {
       return;
     }
 
+    if (!contractsDeployed) {
+      toast.error(
+        'Contracts not deployed on this network. Please switch to Sepolia.',
+      );
+      return;
+    }
+
+    if (chainId !== 11155111) {
+      toast.error('Please switch to Sepolia testnet to use ChainLuck');
+      return;
+    }
+
+    console.log('🔓 Approving USDC with Sepolia gas optimization:', {
+      amount,
+      address,
+      chainId,
+      usdcContract: contracts.usdc,
+      spender: contracts.chainluckLottery,
+    });
+
     try {
       const amountInWei = parseUSDCAmount(amount);
+      const gasSettings = getGasSettings('approve');
+
+      console.log('💰 Using Sepolia gas settings for approval:', gasSettings);
+
       approveUSDC({
         address: contracts.usdc,
         abi: MOCK_USDC_ABI,
         functionName: 'approve',
         args: [contracts.chainluckLottery, amountInWei],
+        // CRITICAL: Add gas settings for Sepolia
+        ...gasSettings,
       });
     } catch (error) {
-      console.error('Error approving USDC:', error);
-      toast.error('Failed to initiate approval');
+      console.error('❌ Error approving USDC:', error);
+      toast.error('Failed to initiate approval', {
+        description: parseContractError(error),
+      });
     }
   };
 
   // =============================================================================
-  // FAUCET (for testing only)
+  // FAUCET WITH PROPER GAS HANDLING
   // =============================================================================
 
   const {
@@ -490,9 +864,13 @@ export function useUSDCContract() {
   // Handle faucet completion
   useEffect(() => {
     if (isFaucetConfirmed) {
-      refetchBalance();
-      toast.success('Test USDC received!', {
+      console.log('✅ Faucet Confirmed');
+      setTimeout(() => {
+        refetchBalance();
+      }, 2000);
+      toast.success('🎉 Test USDC received!', {
         description: 'You received 10,000 USDC for testing',
+        duration: 5000,
       });
     }
   }, [isFaucetConfirmed, refetchBalance]);
@@ -501,8 +879,11 @@ export function useUSDCContract() {
   useEffect(() => {
     if (faucetError || faucetConfirmError) {
       const error = faucetError || faucetConfirmError;
+      console.error('❌ Faucet Error:', error);
+
       toast.error('Faucet failed', {
-        description: error?.message || 'Failed to get test USDC',
+        description: parseContractError(error),
+        duration: 6000,
       });
     }
   }, [faucetError, faucetConfirmError]);
@@ -513,21 +894,40 @@ export function useUSDCContract() {
       return;
     }
 
-    // Check if we're on localhost/hardhat network
-    if (chainId !== 1337) {
-      toast.error('Faucet only available on localhost network (Chain ID 1337)');
+    if (!contractsDeployed) {
+      toast.error(
+        'Contracts not deployed on this network. Please switch to Sepolia.',
+      );
       return;
     }
 
+    // Check if we're using MockUSDC (Sepolia testnet)
+    if (chainId !== 11155111) {
+      toast.error('Faucet only available on Sepolia testnet');
+      return;
+    }
+
+    console.log('🚰 Using USDC Faucet with Sepolia gas optimization:', {
+      address,
+      chainId,
+      usdcContract: contracts.usdc,
+    });
+
     try {
+      const gasSettings = getGasSettings('faucet');
+
       useFaucet({
         address: contracts.usdc,
         abi: MOCK_USDC_ABI,
         functionName: 'faucet',
+        // CRITICAL: Add gas settings for Sepolia
+        ...gasSettings,
       });
     } catch (error) {
-      console.error('Error using faucet:', error);
-      toast.error('Failed to use faucet');
+      console.error('❌ Error using faucet:', error);
+      toast.error('Failed to use faucet', {
+        description: parseContractError(error),
+      });
     }
   };
 
@@ -536,11 +936,23 @@ export function useUSDCContract() {
   // =============================================================================
 
   const hasEnoughBalance = (requiredAmount: number): boolean => {
-    return usdcBalance >= requiredAmount;
+    const sufficient = usdcBalance >= requiredAmount;
+    console.log('💰 Balance Check:', {
+      usdcBalance,
+      requiredAmount,
+      sufficient,
+    });
+    return sufficient;
   };
 
   const hasEnoughAllowance = (requiredAmount: number): boolean => {
-    return usdcAllowance >= requiredAmount;
+    const sufficient = usdcAllowance >= requiredAmount;
+    console.log('🔓 Allowance Check:', {
+      usdcAllowance,
+      requiredAmount,
+      sufficient,
+    });
+    return sufficient;
   };
 
   const needsApproval = (requiredAmount: number): boolean => {
@@ -579,6 +991,20 @@ export function useUSDCContract() {
 
     // Contract addresses
     contracts,
+
+    // Network status
+    contractsDeployed,
+    chainId,
+    isSepoliaNetwork: chainId === 11155111,
+
+    // Debug info
+    debug: {
+      balanceError,
+      allowanceError,
+      faucetError,
+      contractAddress: contracts.usdc,
+      lotteryAddress: contracts.chainluckLottery,
+    },
   };
 }
 
@@ -589,6 +1015,8 @@ export function useUSDCContract() {
 export function useRecentWinners() {
   const chainId = useChainId();
   const contracts = getContractAddresses(chainId);
+  const contractsDeployed = isContractDeployed(chainId);
+
   const [recentWinners, setRecentWinners] = useState<
     Array<{
       id: string;
@@ -605,6 +1033,7 @@ export function useRecentWinners() {
     address: contracts.chainluckLottery,
     abi: CHAINLUCK_LOTTERY_ABI,
     eventName: 'GrandPrizeWon',
+    enabled: contractsDeployed,
     onLogs: (logs) => {
       const newWinners = logs.map((log) => ({
         id: `${log.transactionHash}-${log.logIndex}`,
