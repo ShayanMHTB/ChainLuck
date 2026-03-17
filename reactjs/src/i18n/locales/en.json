@@ -1,0 +1,34 @@
+{
+  "nav": {
+    "home": "Home",
+    "play": "Play",
+    "dashboard": "Dashboard",
+    "stats": "Stats",
+    "about": "About"
+  },
+  "connect": "Connect Wallet",
+  "disconnect": "Disconnect",
+  "lang": "Language",
+  "pages": {
+    "home": {
+      "title": "ChainLuck",
+      "subtitle": "Provably-fair on-chain lottery — anyone can verify the odds."
+    },
+    "play": {
+      "title": "Play",
+      "subtitle": "Ticket purchase flow — coming soon."
+    },
+    "dashboard": {
+      "title": "Dashboard",
+      "subtitle": "Your activity and stats — coming soon."
+    },
+    "stats": {
+      "title": "Stats",
+      "subtitle": "Protocol stats and leaderboard — coming soon."
+    },
+    "about": {
+      "title": "About",
+      "subtitle": "How ChainLuck works."
+    }
+  }
+}
