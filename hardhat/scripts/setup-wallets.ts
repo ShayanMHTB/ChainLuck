@@ -1,5 +1,7 @@
-// scripts/setup-wallets.ts
+// hardhat/scripts/setup-wallets.ts
 import { ethers } from 'hardhat';
+import { writeFileSync, mkdirSync, existsSync } from 'fs';
+import { join } from 'path';
 import 'dotenv/config';
 
 interface TestWallet {
@@ -9,7 +11,7 @@ interface TestWallet {
 }
 
 async function main() {
-  console.log('👥 Setting up test wallets for Sepolia...\n');
+  console.log('👥 Setting up test wallets for network...\n');
 
   const [deployer] = await ethers.getSigners();
   const network = await ethers.provider.getNetwork();
@@ -17,14 +19,18 @@ async function main() {
   console.log('🔑 Setup initiated by:', deployer.address);
   console.log('🌐 Network:', network.name);
 
-  // Load deployment info
-  const fs = require('fs');
-  const path = require('path');
-
+  // Load deployment info from new organized structure
   let deploymentInfo;
   try {
-    const deploymentPath = path.join(__dirname, '../deployments.json');
-    deploymentInfo = JSON.parse(fs.readFileSync(deploymentPath, 'utf8'));
+    const deploymentPath = join(
+      __dirname,
+      '../deployments/deployment-info.json',
+    );
+    if (!existsSync(deploymentPath)) {
+      console.error('❌ No deployment info found. Run deployment first.');
+      process.exit(1);
+    }
+    deploymentInfo = require(deploymentPath);
   } catch (error) {
     console.error('❌ Could not load deployment info. Run deployment first.');
     process.exit(1);
@@ -91,10 +97,17 @@ async function main() {
     console.log(
       "💡 Test wallets have ETH for gas, but you'll need to provide USDC manually",
     );
-    console.log('🌐 Get Sepolia testnet USDC from: https://faucet.circle.com/');
+
+    if (network.name === 'sepolia') {
+      console.log(
+        '🌐 Get Sepolia testnet USDC from: https://faucet.circle.com/',
+      );
+    }
   }
 
-  // Save wallet information
+  // Save wallet information in organized structure
+  const deploymentsDir = join(__dirname, '../deployments');
+
   const walletData = {
     generatedAt: new Date().toISOString(),
     network: network.name,
@@ -112,27 +125,41 @@ async function main() {
     instructions: {
       importToMetaMask:
         'Use the private keys above to import wallets into MetaMask',
-      addSepoliaNetwork: 'Make sure MetaMask is connected to Sepolia testnet',
-      getUSDC: 'If USDC funding failed, get testnet USDC from Circle faucet',
+      addNetwork: `Make sure MetaMask is connected to ${network.name} testnet`,
+      getUSDC:
+        deploymentInfo.contracts.usdcType === 'MockUSDC'
+          ? 'Use the faucet function in the MockUSDC contract'
+          : 'Get testnet USDC from Circle faucet if USDC funding failed',
     },
   };
 
-  const outputPath = path.join(__dirname, '../test-wallets.json');
-  fs.writeFileSync(outputPath, JSON.stringify(walletData, null, 2));
+  const outputPath = join(deploymentsDir, 'test-wallets.json');
+  writeFileSync(outputPath, JSON.stringify(walletData, null, 2));
 
   console.log('\n📁 Wallet information saved to:', outputPath);
 
   console.log('\n🎉 Test wallet setup completed!');
   console.log('\n📋 Quick Start Guide:');
   console.log('1. Import any wallet private key into MetaMask');
-  console.log('2. Switch MetaMask to Sepolia testnet');
-  console.log('3. If no USDC, get some from: https://faucet.circle.com/');
-  console.log('4. Run: npm run test-game');
+  console.log(`2. Switch MetaMask to ${network.name} testnet`);
+
+  if (deploymentInfo.contracts.usdcType === 'MockUSDC') {
+    console.log('3. Use MockUSDC faucet to get test USDC');
+  } else {
+    console.log('3. If no USDC, get some from: https://faucet.circle.com/');
+  }
+
+  console.log('4. Run: npm run test:game');
 
   console.log('\n🔗 Useful Links:');
-  console.log('   Sepolia Faucet (ETH): https://sepoliafaucet.com/');
-  console.log('   Circle USDC Faucet: https://faucet.circle.com/');
-  console.log('   Sepolia Explorer: https://sepolia.etherscan.io/');
+  if (network.name === 'sepolia') {
+    console.log('   Sepolia Faucet (ETH): https://sepoliafaucet.com/');
+    console.log('   Circle USDC Faucet: https://faucet.circle.com/');
+    console.log('   Sepolia Explorer: https://sepolia.etherscan.io/');
+  } else if (network.name === 'mumbai') {
+    console.log('   Mumbai Faucet: https://faucet.polygon.technology/');
+    console.log('   Mumbai Explorer: https://mumbai.polygonscan.com/');
+  }
 }
 
 function generateTestWallets(count: number): TestWallet[] {

@@ -1,20 +1,27 @@
-// scripts/fund-pools.ts
+// hardhat/scripts/fund-pools.ts
 import { ethers } from 'hardhat';
+import { join } from 'path';
+import { existsSync } from 'fs';
 import 'dotenv/config';
 
 async function main() {
-  console.log('💰 Funding ChainLuck pools on Sepolia...\n');
+  console.log('💰 Funding ChainLuck Multi-Tier pools on network...\n');
 
   const [deployer] = await ethers.getSigners();
+  const network = await ethers.provider.getNetwork();
 
-  // Load deployment info
-  const fs = require('fs');
-  const path = require('path');
-
+  // Load deployment info from new organized structure
   let deploymentInfo;
   try {
-    const deploymentPath = path.join(__dirname, '../deployments.json');
-    deploymentInfo = JSON.parse(fs.readFileSync(deploymentPath, 'utf8'));
+    const deploymentPath = join(
+      __dirname,
+      '../deployments/deployment-info.json',
+    );
+    if (!existsSync(deploymentPath)) {
+      console.error('❌ No deployment info found. Run deployment first.');
+      process.exit(1);
+    }
+    deploymentInfo = require(deploymentPath);
   } catch (error) {
     console.error('❌ Could not load deployment info. Run deployment first.');
     process.exit(1);
@@ -29,8 +36,9 @@ async function main() {
 
   console.log('📋 Contract Information:');
   console.log(`   ChainLuck: ${chainluckAddress}`);
-  console.log(`   USDC: ${usdcAddress}`);
+  console.log(`   USDC: ${usdcAddress} (${deploymentInfo.contracts.usdcType})`);
   console.log(`   Deployer: ${deployer.address}`);
+  console.log(`   Network: ${network.name} (${network.chainId})`);
 
   // Check deployer USDC balance
   const deployerBalance = await usdc.balanceOf(deployer.address);
@@ -38,129 +46,140 @@ async function main() {
     `💳 Deployer USDC balance: $${ethers.formatUnits(deployerBalance, 6)}`,
   );
 
-  // Funding amounts from environment or defaults
-  const instantPoolAmount = ethers.parseUnits(
-    process.env.INITIAL_INSTANT_POOL || '10000', // $10,000
-    6,
-  );
-  const grandPrizePoolAmount = ethers.parseUnits(
-    process.env.INITIAL_GRAND_PRIZE_POOL || '20000', // $20,000
-    6,
-  );
-  const totalFunding = instantPoolAmount + grandPrizePoolAmount;
+  // Multi-tier funding configuration
+  const tierFunding = [
+    {
+      tier: 0,
+      name: 'Basic',
+      instantAmount: ethers.parseUnits(
+        process.env.INITIAL_BASIC_INSTANT_POOL || '2000',
+        6,
+      ),
+      grandPrizeAmount: ethers.parseUnits(
+        process.env.INITIAL_BASIC_GRAND_PRIZE_POOL || '5000',
+        6,
+      ),
+    },
+    {
+      tier: 1,
+      name: 'Standard',
+      instantAmount: ethers.parseUnits(
+        process.env.INITIAL_STANDARD_INSTANT_POOL || '5000',
+        6,
+      ),
+      grandPrizeAmount: ethers.parseUnits(
+        process.env.INITIAL_STANDARD_GRAND_PRIZE_POOL || '10000',
+        6,
+      ),
+    },
+    {
+      tier: 2,
+      name: 'Premium',
+      instantAmount: ethers.parseUnits(
+        process.env.INITIAL_PREMIUM_INSTANT_POOL || '10000',
+        6,
+      ),
+      grandPrizeAmount: ethers.parseUnits(
+        process.env.INITIAL_PREMIUM_GRAND_PRIZE_POOL || '25000',
+        6,
+      ),
+    },
+  ];
 
-  console.log('\n💰 Funding Configuration:');
-  console.log(`   Instant Pool: $${ethers.formatUnits(instantPoolAmount, 6)}`);
-  console.log(
-    `   Grand Prize Pool: $${ethers.formatUnits(grandPrizePoolAmount, 6)}`,
-  );
+  // Calculate total funding needed
+  const totalFunding = tierFunding.reduce((total, tier) => {
+    return total + tier.instantAmount + tier.grandPrizeAmount;
+  }, 0n);
+
+  console.log('\n💰 Multi-Tier Funding Configuration:');
+  tierFunding.forEach((tier) => {
+    console.log(`   ${tier.name} Tier (${tier.tier}):`);
+    console.log(
+      `     Instant Pool: $${ethers.formatUnits(tier.instantAmount, 6)}`,
+    );
+    console.log(
+      `     Grand Prize Pool: $${ethers.formatUnits(tier.grandPrizeAmount, 6)}`,
+    );
+  });
   console.log(`   Total Required: $${ethers.formatUnits(totalFunding, 6)}`);
 
   // Check if deployer has enough USDC
   if (deployerBalance < totalFunding) {
-    console.log('\n⚠️  Insufficient USDC balance for funding!');
-    console.log('💡 Options:');
-    console.log('   1. Get testnet USDC from Circle faucet');
-    console.log('   2. Use a different funding amount');
-    console.log('   3. Deploy MockUSDC for testing');
+    console.log('\n⚠️  Insufficient USDC balance for full funding!');
 
-    // Ask if user wants to proceed with available balance
-    const availableAmount = deployerBalance;
-    if (availableAmount > 0) {
-      console.log(
-        `\n📊 Available for funding: $${ethers.formatUnits(
-          availableAmount,
-          6,
-        )}`,
-      );
-      console.log('🔄 Proceeding with available balance...');
+    if (deploymentInfo.contracts.usdcType === 'MockUSDC') {
+      console.log('🔧 Attempting to mint USDC for funding...');
+      try {
+        const mockUsdc = await ethers.getContractAt('MockUSDC', usdcAddress);
+        const mintTx = await mockUsdc.mint(deployer.address, totalFunding);
+        await mintTx.wait();
+        console.log(`✅ Minted $${ethers.formatUnits(totalFunding, 6)} USDC`);
 
-      // Split available balance proportionally
-      const instantProportion =
-        (instantPoolAmount * availableAmount) / totalFunding;
-      const grandPrizeProportion = availableAmount - instantProportion;
-
-      console.log(
-        `   Adjusted Instant Pool: $${ethers.formatUnits(
-          instantProportion,
-          6,
-        )}`,
-      );
-      console.log(
-        `   Adjusted Grand Prize Pool: $${ethers.formatUnits(
-          grandPrizeProportion,
-          6,
-        )}`,
-      );
-
-      // Update funding amounts
-      const finalInstant = instantProportion;
-      const finalGrandPrize = grandPrizeProportion;
-      const finalTotal = finalInstant + finalGrandPrize;
-
-      await fundPools(
-        chainluck,
-        usdc,
-        deployer,
-        finalInstant,
-        finalGrandPrize,
-        finalTotal,
-      );
+        const newBalance = await usdc.balanceOf(deployer.address);
+        console.log(
+          `💳 New USDC balance: $${ethers.formatUnits(newBalance, 6)}`,
+        );
+      } catch (error) {
+        console.log('❌ Failed to mint USDC:', error);
+        process.exit(1);
+      }
     } else {
-      console.log('❌ No USDC available for funding. Exiting...');
+      console.log('❌ Need real USDC for funding. Get from faucet or bridge.');
       process.exit(1);
     }
-  } else {
-    // Proceed with full funding
-    await fundPools(
-      chainluck,
-      usdc,
-      deployer,
-      instantPoolAmount,
-      grandPrizePoolAmount,
-      totalFunding,
-    );
   }
-}
 
-async function fundPools(
-  chainluck: any,
-  usdc: any,
-  deployer: any,
-  instantAmount: bigint,
-  grandPrizeAmount: bigint,
-  totalAmount: bigint,
-) {
+  // Fund each tier
   console.log('\n🔓 Approving USDC spending...');
-
-  // Approve ChainLuck to spend USDC
-  const approveTx = await usdc.approve(
-    await chainluck.getAddress(),
-    totalAmount,
-  );
+  const approveTx = await usdc.approve(chainluckAddress, totalFunding);
   await approveTx.wait();
   console.log('✅ USDC spending approved');
 
-  console.log('\n💸 Funding pools...');
+  console.log('\n💸 Funding tier pools...');
 
-  // Fund the pools
-  const fundTx = await chainluck.refillPools(instantAmount, grandPrizeAmount);
-  const receipt = await fundTx.wait();
+  for (const tierConfig of tierFunding) {
+    try {
+      console.log(
+        `\n🎯 Funding ${tierConfig.name} Tier (${tierConfig.tier})...`,
+      );
 
-  console.log('✅ Pools funded successfully!');
-  console.log(`⛽ Gas used: ${receipt.gasUsed.toString()}`);
+      const fundTx = await chainluck.refillPools(
+        tierConfig.tier,
+        tierConfig.instantAmount,
+        tierConfig.grandPrizeAmount,
+      );
+      const receipt = await fundTx.wait();
 
-  // Verify funding
-  console.log('\n📊 Verifying pool balances...');
-  const stats = await chainluck.getContractStats();
+      console.log(`✅ ${tierConfig.name} tier funded successfully!`);
+      console.log(`   Gas used: ${receipt.gasUsed.toString()}`);
 
-  console.log(`   Instant Pool: $${ethers.formatUnits(stats[2], 6)}`);
-  console.log(`   Grand Prize Pool: $${ethers.formatUnits(stats[3], 6)}`);
-  console.log(`   Contract Balance: $${ethers.formatUnits(stats[4], 6)}`);
-  console.log(`   Total Tickets Sold: ${stats[0]}`);
+      // Verify funding
+      const tierStats = await chainluck.getTierStats(tierConfig.tier);
+      console.log(`   Instant Pool: $${ethers.formatUnits(tierStats[2], 6)}`);
+      console.log(
+        `   Grand Prize Pool: $${ethers.formatUnits(tierStats[3], 6)}`,
+      );
+    } catch (error) {
+      console.log(`❌ Failed to fund ${tierConfig.name} tier:`, error.message);
+    }
+  }
 
-  console.log('\n🎉 Pool funding completed successfully!');
-  console.log('🎮 Ready for gameplay testing!');
+  // Show final statistics
+  console.log('\n📊 Final Pool Status:');
+  const globalStats = await chainluck.getGlobalStats();
+  console.log(
+    `   Total Instant Pools: $${ethers.formatUnits(globalStats[2], 6)}`,
+  );
+  console.log(
+    `   Total Grand Prize Pools: $${ethers.formatUnits(globalStats[3], 6)}`,
+  );
+  console.log(`   Contract Balance: $${ethers.formatUnits(globalStats[4], 6)}`);
+
+  console.log('\n🎉 Multi-tier pool funding completed successfully!');
+  console.log(
+    '🔄 Run "npm run sync:config" to sync frontend with updated pools',
+  );
+  console.log('🎮 Ready for multi-tier gameplay testing!');
 }
 
 main()
