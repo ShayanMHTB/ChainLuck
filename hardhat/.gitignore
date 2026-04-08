@@ -1,21 +1,90 @@
-node_modules
+# hardhat/.gitignore
+
+# ═══════════════════════════════════════════════════════════════════════
+#                              DEPENDENCIES
+# ═══════════════════════════════════════════════════════════════════════
+node_modules/
+*.lock
+
+# ═══════════════════════════════════════════════════════════════════════
+#                            ENVIRONMENT VARS
+# ═══════════════════════════════════════════════════════════════════════
 .env
+.env.local
+.env.production
+.env.staging
+*.private.json
 
-# Hardhat files
-/cache
-/artifacts
+# ═══════════════════════════════════════════════════════════════════════
+#                            HARDHAT ARTIFACTS
+# ═══════════════════════════════════════════════════════════════════════
+/cache/
+/artifacts/
+/typechain/
+/typechain-types/
 
-# TypeChain files
-/typechain
-/typechain-types
-
-# solidity-coverage files
-/coverage
+# ═══════════════════════════════════════════════════════════════════════
+#                              COVERAGE
+# ═══════════════════════════════════════════════════════════════════════
+/coverage/
 /coverage.json
+.nyc_output/
 
-# Hardhat Ignition default folder for deployments against a local node
-ignition/deployments/chain-31337
-
-# Built files
+# ═══════════════════════════════════════════════════════════════════════
+#                           DEPLOYMENT FILES
+# ═══════════════════════════════════════════════════════════════════════
+# OLD FILES (to be moved to deployments/)
 deployments.json
 test-wallets.json
+
+# Keep organized deployment structure
+deployments/*/
+!deployments/.gitkeep
+!deployments/deployment-info.json
+
+# ═══════════════════════════════════════════════════════════════════════
+#                            HARDHAT IGNITION
+# ═══════════════════════════════════════════════════════════════════════
+ignition/deployments/chain-31337/
+
+# ═══════════════════════════════════════════════════════════════════════
+#                            COMPILED FILES
+# ═══════════════════════════════════════════════════════════════════════
+*.tsbuildinfo
+/contracts/flattened.sol
+
+# ═══════════════════════════════════════════════════════════════════════
+#                              LOGS & DEBUG
+# ═══════════════════════════════════════════════════════════════════════
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ═══════════════════════════════════════════════════════════════════════
+#                            OPERATING SYSTEM
+# ═══════════════════════════════════════════════════════════════════════
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ═══════════════════════════════════════════════════════════════════════
+#                               IDE FILES
+# ═══════════════════════════════════════════════════════════════════════
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ═══════════════════════════════════════════════════════════════════════
+#                              TEMP FILES
+# ═══════════════════════════════════════════════════════════════════════
+*.tmp
+*.temp
+.cache/
