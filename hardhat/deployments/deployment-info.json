@@ -1,0 +1,29 @@
+{
+  "version": "Multi-Tier v1.0.0",
+  "network": "sepolia",
+  "chainId": "11155111",
+  "deployer": "0x3B93400E2Ec05A61A938Ef4B55651CB2508CC6d8",
+  "timestamp": "2025-08-16T15:49:39.703Z",
+  "blockNumber": 8997743,
+  "transactionHash": "0x10cc8fad79bb71bd4acc1205ec0a67b1dbe44964da0f12c0a5b6d39dd6f437cd",
+  "contracts": {
+    "chainluck": "0xbE6fc1F970150722939b90bA64F5606Deb23d1F6",
+    "usdc": "0x63095194e6Ea2B68280f6EE694C8168cECb22321",
+    "usdcType": "MockUSDC"
+  },
+  "features": {
+    "multiTier": true,
+    "tierCount": 3,
+    "referralSystem": true,
+    "dailyCheckIns": true,
+    "specialLotteries": 5
+  },
+  "gasUsed": {
+    "chainluck": "TBD",
+    "total": "TBD"
+  },
+  "networkConfig": {
+    "isMainnet": false,
+    "explorerUrl": "https://sepolia.etherscan.io"
+  }
+}
